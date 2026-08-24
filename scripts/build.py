@@ -95,6 +95,17 @@ thead th{color:var(--muted);font-weight:600}
 .chhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .viewseg{flex-wrap:wrap}
 .viewhint{font-size:12px;color:var(--muted);margin-bottom:8px}
+.splitctrl{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.splitctrl select{font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:220px;font-weight:600}
+.splitgrid{display:grid;grid-template-columns:150px 1fr 1fr;gap:2px 10px;align-items:center}
+.splitgrid .hd{font-size:12px;font-weight:650;color:var(--ink);padding:6px 0;position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border)}
+.splitgrid .hd i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.splitgrid .oplbl{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.splitgrid .oplbl small{display:block;color:var(--muted);font-weight:400;font-size:10.5px}
+.splitcell{border:1px solid var(--border);border-radius:9px;padding:6px 8px;background:var(--surface-2)}
+.splitcell .st{font-size:10.5px;color:var(--ink-2);margin-bottom:3px}
+.splitcell .st b{color:var(--ink);font-size:12.5px}
+.splitcell.empty{opacity:.45;font-size:11px;color:var(--muted);text-align:center;padding:14px 0}
 .smgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .smcard{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
 .smcard .nm{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -150,6 +161,10 @@ button.tog{padding:8px 12px}
     <div class="chhead">
       <div><h2 id="chTitle">Comparativo diário</h2><div class="cap" id="chCap"></div></div>
       <div class="seg viewseg" id="viewSeg"></div>
+    </div>
+    <div class="splitctrl" id="splitCtrl" hidden>
+      <div class="field"><label>Indicador A · esquerda</label><select id="indA"></select></div>
+      <div class="field"><label>Indicador B · direita</label><select id="indB"></select></div>
     </div>
     <div class="viewhint" id="viewHint"></div>
     <div class="chart" id="lineWrap"></div>
@@ -341,15 +356,56 @@ function lowerBetter(name){ return /Backlog|Turnover|Absente|Deviation|Deviaç|D
 const BLUE=['#cde2fb','#9ec5f4','#6da7ec','#3987e5','#256abf','#184f95','#0d366b'];
 function blueAt(t){ t=Math.max(0,Math.min(1,t)); return BLUE[Math.round(t*(BLUE.length-1))]; }
 
-const VIEWS=[['rank','Ranking'],['smooth','Linha suavizada'],['multi','Pequenos múltiplos'],['heat','Mapa de calor'],['line','Linha diária']];
+const VIEWS=[['rank','Ranking'],['split','Lado a lado'],['smooth','Linha suavizada'],['multi','Pequenos múltiplos'],['heat','Mapa de calor'],['line','Linha diária']];
 let chartMode='rank';
+let indA=indActive[0], indB=(indActive[1]!==undefined?indActive[1]:indActive[0]);
 const HINTS={
   rank:'Barras ordenadas: a operação no topo tem o maior valor no período. Quando todas as séries são do mesmo indicador, marco a melhor e a pior.',
+  split:'Lado a lado: cada linha é uma operação; à esquerda o Indicador A, à direita o Indicador B. As operações vêm da seleção “Operações” acima. Cada lado tem sua própria escala.',
   smooth:'Média móvel de 7 dias — remove o serrilhado de fim de semana e mostra a tendência de cada operação.',
   multi:'Um mini-gráfico por operação, todos na mesma escala. Ideal para bater o olho e comparar formatos sem sobreposição.',
   heat:'Mapa de calor: cada linha é uma operação, cada coluna um dia. Quanto mais escuro, maior o valor. Fácil ver quem é forte e onde há falhas.',
   line:'Linhas diárias sobrepostas (cru).'
 };
+function buildIndAB(){
+  const mk=el=>{ el.innerHTML=DATA.indicators.map((it,i)=>it.active>0?`<option value="${i}">${it.m}</option>`:'').join(''); };
+  const a=document.getElementById('indA'),b=document.getElementById('indB');
+  mk(a);mk(b); a.value=indA; b.value=indB;
+  a.onchange=()=>{indA=+a.value;drawLine();};
+  b.onchange=()=>{indB=+b.value;drawLine();};
+}
+function splitOps(){ let ops=(selOp.length?selOp:['__all']).filter(k=>k==='__all'||tipoOK(k)); return ops.slice(0,12); }
+function sparkSVG(s,color,top,H){ H=H||44; const N=s.length,pad=4,W=240;
+  const x=i=>pad+i*((W-2*pad)/(N-1)), y=v=>H-pad-(v/(top||1))*(H-2*pad);
+  let d='',st=false,pk=null; s.forEach((v,i)=>{ if(v==null){st=false;return;} d+=(st?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' '; st=true; if(pk==null||v>pk[0])pk=[v,i]; });
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round"/>`;
+  if(pk)g+=`<circle cx="${x(pk[1]).toFixed(1)}" cy="${y(pk[0]).toFixed(1)}" r="2.6" fill="${color}"/>`;
+  return g+'</svg>';
+}
+function splitSeries(){ // for summary/table: both sides
+  const ops=splitOps(); const cA=cssv('--s1'),cB=cssv('--s2'); let out=[];
+  [[indA,cA,'A'],[indB,cB,'B']].forEach(([ii,col,tag])=>{ const it=DATA.indicators[ii];
+    ops.forEach(ok=>{ const s=VIEW.idx.map(j=>opSeries(ii,ok).s[j]); if(!s.some(v=>v!=null))return;
+      out.push({ind:ii,op:ok,unit:it.unit,s,name:`${tag}: ${opLabel(ok)}`,indName:it.m,opName:opLabel(ok),color:col}); }); });
+  return out;
+}
+function renderSplit(wrap){
+  const ops=splitOps(); const itA=DATA.indicators[indA], itB=DATA.indicators[indB];
+  const cA=cssv('--s1'),cB=cssv('--s2');
+  // column maxes
+  let maxA=0,maxB=0;
+  ops.forEach(ok=>{ VIEW.idx.forEach(j=>{ const va=opSeries(indA,ok).s[j], vb=opSeries(indB,ok).s[j];
+    if(va!=null&&va>maxA)maxA=va; if(vb!=null&&vb>maxB)maxB=vb; }); });
+  let h=`<div class="splitgrid"><div class="hd">Operação</div><div class="hd"><i style="background:${cA}"></i>${itA.m}</div><div class="hd"><i style="background:${cB}"></i>${itB.m}</div>`;
+  ops.forEach(ok=>{
+    const sA=VIEW.idx.map(j=>opSeries(indA,ok).s[j]), sB=VIEW.idx.map(j=>opSeries(indB,ok).s[j]);
+    const tA=sum(sA), tB=sum(sB);
+    h+=`<div class="oplbl">${opLabel(ok)}</div>`;
+    h+= sA.some(v=>v!=null)?`<div class="splitcell"><div class="st"><b>${fmt(tA,itA.unit)}</b> · ${fmt(seAvg(sA),itA.unit)}/dia</div>${sparkSVG(sA,cA,maxA)}</div>`:`<div class="splitcell empty">sem dados</div>`;
+    h+= sB.some(v=>v!=null)?`<div class="splitcell"><div class="st"><b>${fmt(tB,itB.unit)}</b> · ${fmt(seAvg(sB),itB.unit)}/dia</div>${sparkSVG(sB,cB,maxB)}</div>`:`<div class="splitcell empty">sem dados</div>`;
+  });
+  h+='</div>'; wrap.innerHTML=h;
+}
 function buildViewSeg(){ const el=document.getElementById('viewSeg');
   el.innerHTML=VIEWS.map(v=>`<button data-v="${v[0]}">${v[1]}</button>`).join('');
   el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ chartMode=b.dataset.v; syncViewSeg(); drawLine(); });
@@ -360,12 +416,28 @@ function syncViewSeg(){ document.querySelectorAll('#viewSeg button').forEach(b=>
 let geom=null;
 function drawLine(){
   geom=null;
-  const series=activeSeries(); const wrap=document.getElementById('lineWrap');
+  computeView();
+  const wrap=document.getElementById('lineWrap');
+  const mlab = selMonths.size===MONTHS.length?DATA.period:[...selMonths].sort().map(m=>MNAME[m.slice(5,7)]).join(' + ');
+  document.getElementById('viewHint').textContent=HINTS[chartMode]||'';
+  document.getElementById('splitCtrl').hidden = chartMode!=='split';
+
+  if(chartMode==='split'){
+    const series=splitSeries();
+    document.getElementById('warn').textContent='';
+    document.getElementById('legend').innerHTML='';
+    const nops=splitOps().length;
+    document.getElementById('chTitle').textContent='Lado a lado — 2 indicadores';
+    document.getElementById('chCap').textContent=`${nops} operação(ões) · ${DATA.indicators[indA].m} vs ${DATA.indicators[indB].m} · ${mlab}`;
+    if(!nops){ wrap.innerHTML='<div class="nodata">Selecione ao menos uma operação acima.</div>'; drawCmp([]); buildTable([]); return; }
+    renderSplit(wrap); drawCmp(series); buildTable(series); return;
+  }
+
+  document.getElementById('chTitle').textContent='Comparativo diário';
+  const series=activeSeries();
   document.getElementById('warn').textContent=capped>0?`Mostrando as 8 primeiras séries (${capped} a mais ocultas). Refine a seleção.`:'';
   const units=[...new Set(series.map(s=>s.unit))];
-  const mlab = selMonths.size===MONTHS.length?DATA.period:[...selMonths].sort().map(m=>MNAME[m.slice(5,7)]).join(' + ');
   document.getElementById('chCap').textContent=`${series.length} série(s) · ${mlab}`+(units.length>1?' · atenção: mistura contagem e %':'');
-  document.getElementById('viewHint').textContent=HINTS[chartMode]||'';
   if(!series.length){ wrap.innerHTML='<div class="nodata">Selecione ao menos um indicador e uma operação com dados.</div>'; document.getElementById('legend').innerHTML=''; drawCmp([]); buildTable([]); return; }
   document.getElementById('legend').innerHTML=(series.length>1 && chartMode!=='rank' && chartMode!=='heat')?series.map(se=>`<span><i style="background:${se.color}"></i>${se.name}</span>`).join(''):'';
   if(chartMode==='rank') renderRank(series,wrap);
@@ -509,7 +581,7 @@ function syncAll(){ syncBtns(); drawKpis(); drawLine();
   const oo=document.getElementById('opOpts'); if(oo)renderOpOpts(document.getElementById('opSr').value||''); }
 document.getElementById('tblbtn').onclick=e=>{const c=document.getElementById('tblCard');const open=c.hidden;c.hidden=!open;e.target.setAttribute('aria-expanded',String(open));e.target.textContent=open?'▤ Ocultar tabela':'▤ Tabela diária';};
 window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(drawLine,150);});
-buildIndPop();buildOpPop();buildTipoSeg();buildMonthSeg();buildViewSeg();syncAll();
+buildIndPop();buildOpPop();buildTipoSeg();buildMonthSeg();buildViewSeg();buildIndAB();syncAll();
 </script>'''
 html=html.replace('__DATA__',data)
 skeleton=('<!doctype html>\n<html lang="pt-BR">\n<head>\n'
