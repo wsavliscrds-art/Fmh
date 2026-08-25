@@ -75,7 +75,6 @@ select,button.tog{font:inherit;color:var(--ink);background:var(--surface-2);bord
 .card .cap{font-size:12px;color:var(--muted);margin-bottom:10px}
 .chart{width:100%;overflow-x:auto}
 svg{display:block;max-width:100%}
-.chart > svg{width:100%;height:auto}
 .legend{display:flex;flex-wrap:wrap;gap:10px 14px;margin-top:10px}
 .legend span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
@@ -448,10 +447,12 @@ function drawLine(){
   drawCmp(series); buildTable(series);
 }
 
+function cw(wrap){ return Math.max(320, Math.floor((wrap&&wrap.clientWidth)||900)); }
 function renderLines(series,wrap,smooth){
   const N=VIEW.labels.length;
   const data=series.map(se=>({...se, plot: smooth?movavg(se.s,7):se.s}));
-  const W=Math.max(760,40+N*11.5),H=320,m={t:14,r:16,b:34,l:56};
+  const m={t:14,r:16,b:34,l:56};
+  const W=Math.max(m.l+m.r+N*9, cw(wrap)), H=Math.max(260,Math.min(360,Math.round(cw(wrap)*0.34)));
   let mx=0,mn=0; data.forEach(se=>se.plot.forEach(v=>{if(v!=null){if(v>mx)mx=v;if(v<mn)mn=v;}}));
   const top=niceMax(mx),bot=mn<0?-niceMax(-mn):0;
   const x=i=>m.l+i*((W-m.l-m.r)/(N-1)); const y=v=>m.t+(top-v)/(top-bot||1)*(H-m.t-m.b);
@@ -477,7 +478,7 @@ function renderRank(series,wrap){
   const lb=sameInd&&lowerBetter(series[0].indName);
   rows.sort((a,b)=> lb? a.tot-b.tot : b.tot-a.tot);
   const max=Math.max(...rows.map(r=>r.tot),1);
-  const rowH=34, W=760, lblW=250, barMax=W-lblW-90, H=rows.length*rowH+8;
+  const W=cw(wrap), lblW=Math.min(300,Math.max(180,Math.round(W*0.28))), rowH=34, barMax=Math.max(80,W-lblW-110), H=rows.length*rowH+8;
   const ink2=cssv('--ink-2');
   let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="bars" role="img" aria-label="Ranking">`;
   rows.forEach((r,i)=>{ const yy=i*rowH+6, w=Math.max(2,r.tot/max*barMax);
@@ -516,15 +517,16 @@ function renderHeat(series,wrap){
   const N=VIEW.labels.length;
   const rows=series.slice().sort((a,b)=>(sum(b.s)||0)-(sum(a.s)||0));
   let gmax=0; rows.forEach(se=>se.s.forEach(v=>{if(v!=null&&v>gmax)gmax=v;}));
-  const lblW=210, cw=Math.max(9,Math.min(20,(760-lblW-70)/N)), rowH=22, H=rows.length*rowH+34, W=lblW+N*cw+70;
+  const CW=cw(wrap), lblW=Math.min(240,Math.max(150,Math.round(CW*0.2))), rowH=22, totW=52;
+  const cell=Math.max(6,(CW-lblW-totW)/N), H=rows.length*rowH+34, W=Math.max(CW,lblW+N*cell+totW);
   const muted=cssv('--muted');
   let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Mapa de calor">`;
-  VIEW.labels.forEach((lb,i)=>{ if(i%7===0||i===N-1){ g+=`<text x="${lblW+i*cw+cw/2}" y="12" text-anchor="middle" font-size="10" fill="${muted}">${lb}</text>`; } });
+  VIEW.labels.forEach((lb,i)=>{ if(i%7===0||i===N-1){ g+=`<text x="${lblW+i*cell+cell/2}" y="12" text-anchor="middle" font-size="10" fill="${muted}">${lb}</text>`; } });
   rows.forEach((se,r)=>{ const yy=18+r*rowH;
-    g+=`<text x="0" y="${yy+rowH/2+3}" font-size="11" fill="${cssv('--ink')}">${se.name.length>28?se.name.slice(0,27)+'…':se.name}</text>`;
-    se.s.forEach((v,i)=>{ const xx=lblW+i*cw; const fill=(v==null)?'transparent':(v===0?cssv('--surface-2'):blueAt(gmax?v/gmax:0));
-      g+=`<rect class="heatcell" x="${xx}" y="${yy}" width="${cw}" height="${rowH-3}" fill="${fill}" data-r="${r}" data-i="${i}"><title>${se.name} · ${VIEW.labels[i]}: ${v==null?'—':fmt(v,se.unit)}</title></rect>`; });
-    g+=`<text x="${lblW+N*cw+6}" y="${yy+rowH/2+3}" font-size="11" fill="${cssv('--ink-2')}">${fmtK(sum(se.s))}</text>`;
+    g+=`<text x="0" y="${yy+rowH/2+3}" font-size="11" fill="${cssv('--ink')}">${se.name.length>30?se.name.slice(0,29)+'…':se.name}</text>`;
+    se.s.forEach((v,i)=>{ const xx=lblW+i*cell; const fill=(v==null)?'transparent':(v===0?cssv('--surface-2'):blueAt(gmax?v/gmax:0));
+      g+=`<rect class="heatcell" x="${xx.toFixed(1)}" y="${yy}" width="${cell.toFixed(2)}" height="${rowH-3}" fill="${fill}"><title>${se.name} · ${VIEW.labels[i]}: ${v==null?'—':fmt(v,se.unit)}</title></rect>`; });
+    g+=`<text x="${(lblW+N*cell+6).toFixed(1)}" y="${yy+rowH/2+3}" font-size="11" fill="${cssv('--ink-2')}">${fmtK(sum(se.s))}</text>`;
   });
   g+='</svg>'; wrap.innerHTML=g;
 }
