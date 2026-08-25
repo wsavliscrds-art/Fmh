@@ -36,7 +36,7 @@ html = r'''<title>Painel Mini FMH</title>
 *{box-sizing:border-box}
 body{margin:0;background:var(--plane);color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
-.wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px}
+.wrap{max-width:none;width:100%;margin:0;padding:22px clamp(16px,3vw,40px) 60px}
 header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px}
 h1{font-size:21px;margin:0;font-weight:680;letter-spacing:-0.01em}
 .sub{color:var(--ink-2);font-size:13px}
@@ -75,6 +75,7 @@ select,button.tog{font:inherit;color:var(--ink);background:var(--surface-2);bord
 .card .cap{font-size:12px;color:var(--muted);margin-bottom:10px}
 .chart{width:100%;overflow-x:auto}
 svg{display:block;max-width:100%}
+.chart > svg{width:100%;height:auto}
 .legend{display:flex;flex-wrap:wrap;gap:10px 14px;margin-top:10px}
 .legend span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
