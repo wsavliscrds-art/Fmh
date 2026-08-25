@@ -2,6 +2,7 @@ import json
 import os
 _root=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data=open(os.path.join(_root,'data','daily.json')).read()
+lead=open(os.path.join(_root,'data','lead.json')).read()
 html = r'''<title>Painel Mini FMH</title>
 <style>
 :root{
@@ -90,6 +91,19 @@ thead th{color:var(--muted);font-weight:600}
 .cmp td:first-child{display:flex;align-items:center;gap:7px}
 .cmp .sw{width:11px;height:11px;border-radius:3px;flex:none}
 .tblwrap{max-height:440px;overflow:auto;border:1px solid var(--border);border-radius:10px}
+.tabbar{display:flex;gap:6px;margin:6px 0 18px;flex-wrap:wrap}
+.tab{font:inherit;font-size:14px;font-weight:600;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--border);
+  border-radius:10px;padding:9px 16px;cursor:pointer}
+.tab[aria-selected=true]{background:var(--accent);color:#fff;border-color:transparent}
+.route{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--surface-2)}
+.route .rh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-bottom:6px}
+.route .rh b{color:var(--ink)}
+.route .flow{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.route .node{font-size:11.5px;padding:3px 8px;border-radius:6px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--ink);white-space:nowrap}
+.route .node.orig{background:color-mix(in srgb,var(--s1) 22%,transparent);font-weight:600}
+.route .node.deliv{background:color-mix(in srgb,var(--good) 22%,transparent);font-weight:600}
+.route .arw{color:var(--muted);font-size:12px}
+.route .badge{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:99px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
 .foot{color:var(--muted);font-size:12px;margin-top:26px;border-top:1px solid var(--border);padding-top:12px}
 .nodata{padding:30px;text-align:center;color:var(--muted)}
 .chhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px}
@@ -127,8 +141,14 @@ button.tog{padding:8px 12px}
     <h1>Painel Mini FMH — Comparativo</h1>
     <span class="sub">Escolha indicadores e operações · <span id="period"></span></span>
   </header>
-  <div class="src">Fonte: aba <b>daily</b> (Mini FMH). <b>Indicadores</b> = Metric · <b>Operações</b> = Hub name · datas diárias.</div>
+  <div class="src">Fonte: planilha <b>Mini FMH</b>. Alterne entre as abas abaixo.</div>
 
+  <div class="tabbar" id="tabbar">
+    <button data-t="op" class="tab" aria-selected="true">📦 Operacional (daily)</button>
+    <button data-t="lt" class="tab" aria-selected="false">⏱️ Leadtime (Origem → Delivered)</button>
+  </div>
+
+  <section id="opTab">
   <div class="controls">
     <div class="field">
       <label>Indicadores (coluna A)</label>
@@ -183,6 +203,39 @@ button.tog{padding:8px 12px}
     <div class="cap">Valores por dia de cada série selecionada. Role para o lado para ver todas as datas.</div>
     <div class="tblwrap" id="tblWrap"></div>
   </div>
+  </section>
+
+  <section id="ltTab" hidden>
+    <div class="controls">
+      <div class="field"><label>Mês</label><div class="seg" id="ltMonthSeg"></div></div>
+      <div class="field"><label>Métrica do ranking</label>
+        <select id="ltMetric">
+          <option value="lt_d">Lead time (dias)</option>
+          <option value="lt_h">Lead time (horas)</option>
+          <option value="ops">Operações por pacote</option>
+          <option value="delivered">Pacotes entregues</option>
+        </select>
+      </div>
+      <div class="field"><label>Estação (rotas)</label><select id="ltStation"></select></div>
+    </div>
+    <div class="kpis" id="ltKpis"></div>
+    <div class="card">
+      <div class="chhead"><div><h2 id="ltRankTitle">Ranking de estações</h2><div class="cap" id="ltRankCap"></div></div></div>
+      <div class="chart" id="ltRankWrap"></div>
+      <div class="viewhint">Menor lead time = entrega mais rápida. Marco a estação mais rápida (verde) e a mais lenta (vermelho).</div>
+    </div>
+    <div class="card">
+      <h2>Lead time por mês</h2>
+      <div class="cap">Lead time médio (dias) de cada estação ao longo dos meses disponíveis.</div>
+      <div class="chart" id="ltTrendWrap"></div>
+      <div class="legend" id="ltTrendLegend"></div>
+    </div>
+    <div class="card">
+      <h2>Rotas de exemplo — Origem → Delivered</h2>
+      <div class="cap" id="ltRoutesCap">Trajeto real de pacotes de exemplo, do FM Hub de origem até a entrega.</div>
+      <div id="ltRoutes"></div>
+    </div>
+  </section>
 
   <div class="foot">
     Dados reais da Página10 (01/jun–31/jul 2025). Operação “Overall” é a linha agregada da aba. Séries sem preenchimento na
@@ -587,8 +640,127 @@ window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTim
 // abrir já comparativo: as 6 operações de maior volume do indicador padrão
 selOp=(function(){ const t=currentOpsWithData().slice(0,6); return t.length?t:['__all']; })();
 buildIndPop();buildOpPop();buildTipoSeg();buildMonthSeg();buildViewSeg();buildIndAB();syncAll();
+
+/* ===================== ABA LEADTIME ===================== */
+const LEAD = __LEAD__;
+const LTMETA={lt_d:{lab:'Lead time (dias)',lower:true},lt_h:{lab:'Lead time (horas)',lower:true},ops:{lab:'Operações/pacote',lower:true},delivered:{lab:'Pacotes entregues',lower:false}};
+let ltMonth='__all', ltMetric='lt_d', ltStation='__all';
+function ltFmt(v,mt){ if(v==null)return '—';
+  if(mt==='lt_d')return (Math.round(v*10)/10).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' d';
+  if(mt==='lt_h')return Math.round(v).toLocaleString('pt-BR')+' h';
+  if(mt==='ops')return (Math.round(v*100)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return Math.round(v).toLocaleString('pt-BR'); }
+function ltGet(ym,st){ return LEAD.rows[ym+'|'+st]||null; }
+// aggregate a station across months (weighted by delivered) or for one month
+function ltVal(st,mt,ym){
+  if(ym&&ym!=='__all'){ const r=ltGet(ym,st); return r?r[mt]:null; }
+  // all months: delivered -> sum; others -> weighted by delivered
+  let num=0,den=0,sumD=0,any=false;
+  LEAD.months.forEach(m=>{ const r=ltGet(m,st); if(!r||r[mt]==null)return; any=true;
+    if(mt==='delivered'){ sumD+=r.delivered; } else { const w=r.delivered||1; num+=r[mt]*w; den+=w; } });
+  if(!any)return null; return mt==='delivered'?sumD:(den?num/den:null);
+}
+function ltStationsWith(ym){ return LEAD.stations.filter(s=> ym==='__all'? LEAD.months.some(m=>ltGet(m,s.id)) : ltGet(ym,s.id) ); }
+
+function buildLtMonthSeg(){ const el=document.getElementById('ltMonthSeg');
+  el.innerHTML=['__all'].concat(LEAD.months).map(m=>`<button data-m="${m}">${m==='__all'?'Média (todos)':LEAD.mlabels[m]}</button>`).join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ ltMonth=b.dataset.m; syncLtMonthSeg(); drawLt(); });
+  syncLtMonthSeg();
+}
+function syncLtMonthSeg(){ document.querySelectorAll('#ltMonthSeg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.m===ltMonth))); }
+function buildLtStation(){ const el=document.getElementById('ltStation');
+  el.innerHTML='<option value="__all">Todas as estações</option>'+LEAD.stations.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  el.onchange=()=>{ ltStation=el.value; drawLtRoutes(); };
+}
+
+function drawLtKpis(){
+  const sts=ltStationsWith(ltMonth); const el=document.getElementById('ltKpis');
+  let dSum=0, ltNum=0, ltDen=0, opNum=0, opDen=0;
+  sts.forEach(s=>{ const d=ltVal(s.id,'delivered',ltMonth)||0; dSum+=d;
+    const lt=ltVal(s.id,'lt_d',ltMonth); if(lt!=null){ltNum+=lt*(d||1);ltDen+=(d||1);}
+    const op=ltVal(s.id,'ops',ltMonth); if(op!=null){opNum+=op*(d||1);opDen+=(d||1);} });
+  const cards=[
+    ['Lead time médio', ltDen?ltFmt(ltNum/ltDen,'lt_d'):'—','ponderado por volume'],
+    ['Pacotes entregues', dSum.toLocaleString('pt-BR'), ltMonth==='__all'?'soma dos meses':LEAD.mlabels[ltMonth]],
+    ['Operações/pacote', opDen?ltFmt(opNum/opDen,'ops'):'—','média ponderada'],
+    ['Estações', String(sts.length),'com dados no período'],
+  ];
+  el.innerHTML=cards.map(c=>`<div class="kpi"><div class="k">${c[0]}</div><div class="v">${c[1]}</div><div class="m">${c[2]}</div></div>`).join('');
+}
+function drawLtRank(){
+  const wrap=document.getElementById('ltRankWrap'); const mt=ltMetric; const meta=LTMETA[mt];
+  document.getElementById('ltRankTitle').textContent='Ranking de estações — '+meta.lab;
+  document.getElementById('ltRankCap').textContent=(ltMonth==='__all'?'Média de todos os meses':LEAD.mlabels[ltMonth])+' · '+(meta.lower?'menor no topo (melhor)':'maior no topo');
+  let rows=ltStationsWith(ltMonth).map(s=>({s,v:ltVal(s.id,mt,ltMonth)})).filter(r=>r.v!=null);
+  rows.sort((a,b)=> meta.lower? a.v-b.v : b.v-a.v);
+  if(!rows.length){ wrap.innerHTML='<div class="nodata">Sem dados.</div>'; return; }
+  const max=Math.max(...rows.map(r=>r.v),0.0001);
+  const W=cw(wrap), lblW=Math.min(280,Math.max(160,Math.round(W*0.3))), rowH=34, barMax=Math.max(80,W-lblW-150), H=rows.length*rowH+8;
+  const col=cssv('--s1');
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="bars" role="img" aria-label="Ranking leadtime">`;
+  rows.forEach((r,i)=>{ const yy=i*rowH+6, w=Math.max(2,r.v/max*barMax);
+    const best=i===0, worst=i===rows.length-1&&rows.length>1;
+    g+=`<text x="0" y="${yy+13}" font-size="12" font-weight="600" fill="${cssv('--ink')}">${i+1}. ${r.s.name}</text>`;
+    if(best||worst){const c=best?cssv('--good'):cssv('--bad');g+=`<text x="0" y="${yy+27}" font-size="10.5" font-weight="700" fill="${c}">${best?'✓ '+(meta.lower?'mais rápida':'maior'):'! '+(meta.lower?'mais lenta':'menor')}</text>`;}
+    g+=`<rect x="${lblW}" y="${yy+2}" width="${w.toFixed(1)}" height="${rowH-12}" rx="4" fill="${col}"/>`;
+    g+=`<text x="${(lblW+w+8).toFixed(1)}" y="${yy+15}" font-size="12" fill="${cssv('--ink-2')}">${ltFmt(r.v,mt)}</text>`;
+  });
+  g+='</svg>'; wrap.innerHTML=g;
+}
+function drawLtTrend(){
+  const wrap=document.getElementById('ltTrendWrap'); const N=LEAD.months.length;
+  const sts=LEAD.stations.filter(s=>LEAD.months.some(m=>ltGet(m,s.id)));
+  const series=sts.map((s,i)=>({name:s.name,color:cssv(SERIES[i%8]),s:LEAD.months.map(m=>{const r=ltGet(m,s.id);return r?r.lt_d:null;})}));
+  const W=cw(wrap),H=Math.max(240,Math.min(340,Math.round(W*0.32))),m={t:14,r:16,b:30,l:46};
+  let mx=0; series.forEach(se=>se.s.forEach(v=>{if(v!=null&&v>mx)mx=v;}));
+  const top=Math.ceil(mx)||1; const x=i=>N<=1?m.l:m.l+i*((W-m.l-m.r)/(N-1)); const y=v=>m.t+(top-v)/top*(H-m.t-m.b);
+  const grid=cssv('--grid'),muted=cssv('--muted');
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Lead time por mês">`;
+  for(let t=0;t<=4;t++){const val=top*t/4,yy=y(val);g+=`<line x1="${m.l}" y1="${yy}" x2="${W-m.r}" y2="${yy}" stroke="${grid}"/>`;g+=`<text x="${m.l-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="${muted}">${val.toFixed(1)}d</text>`;}
+  LEAD.months.forEach((mm,i)=>{g+=`<text x="${x(i)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="${muted}">${LEAD.mlabels[mm]}</text>`;});
+  series.forEach(se=>{let d='',st=false;se.s.forEach((v,i)=>{if(v==null){st=false;return;}d+=(st?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' ';const cx=x(i),cy=y(v);d+='';st=true;});
+    g+=`<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2.2" stroke-linejoin="round"/>`;
+    se.s.forEach((v,i)=>{if(v!=null)g+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.4" fill="${se.color}"/>`;});
+  });
+  g+='</svg>'; wrap.innerHTML=g;
+  document.getElementById('ltTrendLegend').innerHTML=series.map(se=>`<span><i style="background:${se.color}"></i>${se.name}</span>`).join('');
+}
+function nodeCls(name){ const n=name.trim();
+  if(/Deliver/i.test(n))return 'deliv';
+  return ''; }
+function drawLtRoutes(){
+  const wrap=document.getElementById('ltRoutes');
+  let ex=LEAD.examples.slice();
+  if(ltMonth!=='__all') ex=ex.filter(e=>e.ym===ltMonth);
+  if(ltStation!=='__all') ex=ex.filter(e=>e.station===ltStation);
+  document.getElementById('ltRoutesCap').textContent=`Trajeto real de pacotes de exemplo (${ex.length}) do FM Hub de origem até a entrega.`;
+  ex=ex.slice(0,40);
+  if(!ex.length){ wrap.innerHTML='<div class="nodata">Sem rotas para o filtro atual.</div>'; return; }
+  const stName=id=>{const s=LEAD.stations.find(x=>x.id===id);return s?s.name:id;};
+  wrap.innerHTML=ex.map(e=>{
+    const parts=(e.seq||'').split('->').map(p=>p.trim()).filter(Boolean);
+    const flow=parts.map((p,i)=>{const cls=i===0?'orig':nodeCls(p);return `<span class="node ${cls}">${p.replace(/_/g,' ')}</span>`+(i<parts.length-1?'<span class="arw">→</span>':'');}).join('');
+    return `<div class="route"><div class="rh"><span><b>${stName(e.station)}</b> · ${LEAD.mlabels[e.ym]||e.ym}</span>`+
+      `<span><span class="badge">${e.ltd!=null?e.ltd.toLocaleString('pt-BR')+' d':'—'}</span> <span class="badge">${e.ops!=null?e.ops+' ops':''}</span> <span style="color:var(--muted)">${e.id}</span></span></div>`+
+      `<div class="flow">${flow}</div></div>`;
+  }).join('');
+}
+function drawLt(){ drawLtKpis(); drawLtRank(); drawLtTrend(); drawLtRoutes(); }
+document.getElementById('ltMetric').onchange=e=>{ ltMetric=e.target.value; drawLtRank(); };
+
+let curTab='op';
+function switchTab(t){ curTab=t;
+  document.querySelectorAll('#tabbar .tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.t===t)));
+  document.getElementById('opTab').hidden = t!=='op';
+  document.getElementById('ltTab').hidden = t!=='lt';
+  if(t==='op') drawLine(); else drawLt();
+}
+document.querySelectorAll('#tabbar .tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.t));
+buildLtMonthSeg();buildLtStation();
+const _oldRz=window.onresize;
+window.addEventListener('resize',()=>{clearTimeout(window._rz2);window._rz2=setTimeout(()=>{ if(curTab==='lt') drawLt(); },150);});
 </script>'''
-html=html.replace('__DATA__',data)
+html=html.replace('__DATA__',data).replace('__LEAD__',lead)
 skeleton=('<!doctype html>\n<html lang="pt-BR">\n<head>\n'
   '<meta charset="utf-8">\n'
   '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
