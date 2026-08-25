@@ -712,21 +712,34 @@ function drawLtRank(){
 }
 function drawLtTrend(){
   const wrap=document.getElementById('ltTrendWrap'); const N=LEAD.months.length;
+  document.getElementById('ltTrendLegend').innerHTML='';
   const sts=LEAD.stations.filter(s=>LEAD.months.some(m=>ltGet(m,s.id)));
-  const series=sts.map((s,i)=>({name:s.name,color:cssv(SERIES[i%8]),s:LEAD.months.map(m=>{const r=ltGet(m,s.id);return r?r.lt_d:null;})}));
-  const W=cw(wrap),H=Math.max(240,Math.min(340,Math.round(W*0.32))),m={t:14,r:16,b:30,l:46};
-  let mx=0; series.forEach(se=>se.s.forEach(v=>{if(v!=null&&v>mx)mx=v;}));
-  const top=Math.ceil(mx)||1; const x=i=>N<=1?m.l:m.l+i*((W-m.l-m.r)/(N-1)); const y=v=>m.t+(top-v)/top*(H-m.t-m.b);
+  // grade de mini gráficos de linha (um por estação), mesma escala p/ comparar
+  let gmax=0; sts.forEach(s=>LEAD.months.forEach(m=>{const r=ltGet(m,s.id);if(r&&r.lt_d!=null&&r.lt_d>gmax)gmax=r.lt_d;}));
+  const top=Math.ceil(gmax)||1;
+  const W=300,H=110,m={t:12,r:12,b:22,l:30};
+  const x=i=>N<=1?W/2:m.l+i*((W-m.l-m.r)/(N-1));
+  const y=v=>m.t+(top-v)/top*(H-m.t-m.b);
   const grid=cssv('--grid'),muted=cssv('--muted');
-  let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Lead time por mês">`;
-  for(let t=0;t<=4;t++){const val=top*t/4,yy=y(val);g+=`<line x1="${m.l}" y1="${yy}" x2="${W-m.r}" y2="${yy}" stroke="${grid}"/>`;g+=`<text x="${m.l-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="${muted}">${val.toFixed(1)}d</text>`;}
-  LEAD.months.forEach((mm,i)=>{g+=`<text x="${x(i)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="${muted}">${LEAD.mlabels[mm]}</text>`;});
-  series.forEach(se=>{let d='',st=false;se.s.forEach((v,i)=>{if(v==null){st=false;return;}d+=(st?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' ';const cx=x(i),cy=y(v);d+='';st=true;});
-    g+=`<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2.2" stroke-linejoin="round"/>`;
-    se.s.forEach((v,i)=>{if(v!=null)g+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.4" fill="${se.color}"/>`;});
+  let html='<div class="smgrid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">';
+  sts.forEach((s,si)=>{
+    const col=cssv(SERIES[si%8]);
+    const vals=LEAD.months.map(mm=>{const r=ltGet(mm,s.id);return r?r.lt_d:null;});
+    const present=vals.filter(v=>v!=null);
+    const avg=present.length?present.reduce((a,b)=>a+b,0)/present.length:null;
+    const last=[...vals].reverse().find(v=>v!=null);
+    let sv=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img">`;
+    for(let t=0;t<=2;t++){const val=top*t/2,yy=y(val);sv+=`<line x1="${m.l}" y1="${yy}" x2="${W-m.r}" y2="${yy}" stroke="${grid}"/>`;sv+=`<text x="${m.l-5}" y="${yy+3}" text-anchor="end" font-size="9" fill="${muted}">${val.toFixed(0)}</text>`;}
+    LEAD.months.forEach((mm,i)=>{sv+=`<text x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="9" fill="${muted}">${LEAD.mlabels[mm]}</text>`;});
+    let d='',st=false; vals.forEach((v,i)=>{if(v==null){st=false;return;}d+=(st?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' ';st=true;});
+    sv+=`<path d="${d}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+    vals.forEach((v,i)=>{if(v!=null){sv+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.2" fill="${col}"/>`;
+      sv+=`<text x="${x(i).toFixed(1)}" y="${(y(v)-6).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="600" fill="${cssv('--ink')}">${v.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})}</text>`;}});
+    sv+='</svg>';
+    html+=`<div class="smcard"><div class="nm"><i style="background:${col}"></i>${s.name}</div>`+
+      `<div class="st">média <b>${avg!=null?avg.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' d':'—'}</b> · último ${last!=null?last.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' d':'—'}</div>${sv}</div>`;
   });
-  g+='</svg>'; wrap.innerHTML=g;
-  document.getElementById('ltTrendLegend').innerHTML=series.map(se=>`<span><i style="background:${se.color}"></i>${se.name}</span>`).join('');
+  html+='</div>'; wrap.innerHTML=html;
 }
 function nodeCls(name){ const n=name.trim();
   if(/Deliver/i.test(n))return 'deliv';
