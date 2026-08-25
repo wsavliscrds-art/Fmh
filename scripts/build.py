@@ -428,11 +428,11 @@ function buildIndAB(){
   b.onchange=()=>{indB=+b.value;drawLine();};
 }
 function splitOps(){ let ops=(selOp.length?selOp:['__all']).filter(k=>k==='__all'||tipoOK(k)); return ops.slice(0,12); }
-function sparkSVG(s,color,top,H){ H=H||44; const N=s.length,pad=4,W=240;
-  const x=i=>pad+i*((W-2*pad)/(N-1)), y=v=>H-pad-(v/(top||1))*(H-2*pad);
+function sparkSVG(s,color,top,W,H){ W=W||240; H=H||60; const N=s.length,pad=5;
+  const x=i=>pad+i*((W-2*pad)/Math.max(1,N-1)), y=v=>H-pad-(v/(top||1))*(H-2*pad);
   let d='',st=false,pk=null; s.forEach((v,i)=>{ if(v==null){st=false;return;} d+=(st?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' '; st=true; if(pk==null||v>pk[0])pk=[v,i]; });
-  let g=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round"/>`;
-  if(pk)g+=`<circle cx="${x(pk[1]).toFixed(1)}" cy="${y(pk[0]).toFixed(1)}" r="2.6" fill="${color}"/>`;
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%" preserveAspectRatio="xMidYMid meet"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>`;
+  if(pk)g+=`<circle cx="${x(pk[1]).toFixed(1)}" cy="${y(pk[0]).toFixed(1)}" r="2.8" fill="${color}"/>`;
   return g+'</svg>';
 }
 function splitSeries(){ // for summary/table: both sides
@@ -445,7 +445,10 @@ function splitSeries(){ // for summary/table: both sides
 function renderSplit(wrap){
   const ops=splitOps(); const itA=DATA.indicators[indA], itB=DATA.indicators[indB];
   const cA=cssv('--s1'),cB=cssv('--s2');
-  // column maxes
+  // largura real de cada coluna de gráfico (grid: 150px | 1fr | 1fr, gap 10)
+  const CW=cw(wrap); const lblW=150;
+  const colW=Math.max(150,Math.floor((CW-lblW-20)/2));
+  const sparkW=Math.max(150,colW-18), sparkH=64;
   let maxA=0,maxB=0;
   ops.forEach(ok=>{ VIEW.idx.forEach(j=>{ const va=opSeries(indA,ok).s[j], vb=opSeries(indB,ok).s[j];
     if(va!=null&&va>maxA)maxA=va; if(vb!=null&&vb>maxB)maxB=vb; }); });
@@ -454,8 +457,8 @@ function renderSplit(wrap){
     const sA=VIEW.idx.map(j=>opSeries(indA,ok).s[j]), sB=VIEW.idx.map(j=>opSeries(indB,ok).s[j]);
     const tA=sum(sA), tB=sum(sB);
     h+=`<div class="oplbl">${opLabel(ok)}</div>`;
-    h+= sA.some(v=>v!=null)?`<div class="splitcell"><div class="st"><b>${fmt(tA,itA.unit)}</b> · ${fmt(seAvg(sA),itA.unit)}/dia</div>${sparkSVG(sA,cA,maxA)}</div>`:`<div class="splitcell empty">sem dados</div>`;
-    h+= sB.some(v=>v!=null)?`<div class="splitcell"><div class="st"><b>${fmt(tB,itB.unit)}</b> · ${fmt(seAvg(sB),itB.unit)}/dia</div>${sparkSVG(sB,cB,maxB)}</div>`:`<div class="splitcell empty">sem dados</div>`;
+    h+= sA.some(v=>v!=null)?`<div class="splitcell"><div class="st"><b>${fmt(tA,itA.unit)}</b> · ${fmt(seAvg(sA),itA.unit)}/dia</div>${sparkSVG(sA,cA,maxA,sparkW,sparkH)}</div>`:`<div class="splitcell empty">sem dados</div>`;
+    h+= sB.some(v=>v!=null)?`<div class="splitcell"><div class="st"><b>${fmt(tB,itB.unit)}</b> · ${fmt(seAvg(sB),itB.unit)}/dia</div>${sparkSVG(sB,cB,maxB,sparkW,sparkH)}</div>`:`<div class="splitcell empty">sem dados</div>`;
   });
   h+='</div>'; wrap.innerHTML=h;
 }
