@@ -1,17 +1,16 @@
 # Painel Mini FMH
 
 Dashboard estático (HTML/SVG puro, sem dependências) para análise comparativa dos
-indicadores operacionais **Mini FMH**, a partir da aba **Página10** da planilha
-*Mini FMH - Analysis*.
+indicadores operacionais **Mini FMH**, a partir da aba **daily** da planilha *Mini FMH*.
 
 **Site:** publicado no Vercel (deploy estático).
 
 ## O que o painel faz
 
-- **Indicadores** (coluna A da Página10) — seleção múltipla das 31 métricas.
-- **Operações** (coluna D) — seleção múltipla dos hubs + linha *Overall* agregada.
-- **Tipo** (coluna E) — filtro *Todos / Mini FMH / Demais*.
-- **Mês** — *Tudo / Junho / Julho* (período dos dados: 01/jun–31/jul 2025).
+- **Indicadores** (Metric) — seleção múltipla das 31 métricas.
+- **Operações** (Hub name) — seleção múltipla dos hubs + linha *Overall* agregada.
+- **Tipo** (Mini FMH) — filtro *Todos / Mini FMH / Demais*.
+- **Mês** — *Tudo / Junho / … / Outubro* (período dos dados: 01/jun–02/out 2025).
 - **Visões de gráfico**, pensadas para comparar operações sem poluição visual:
   - **Ranking** — quem está na frente/atrás; marca melhor/pior quando é um só indicador.
   - **Linha suavizada** — média móvel de 7 dias (remove o serrilhado de fim de semana).
@@ -24,9 +23,9 @@ indicadores operacionais **Mini FMH**, a partir da aba **Página10** da planilha
 
 ```
 index.html            # dashboard final (gerado; dados embutidos, self-contained)
-data/pagina10.json    # dados já tratados e embutidos no index.html
-data/pagina10.csv     # export bruto da aba Página10 (referência)
-scripts/build.py      # gera o index.html a partir de data/pagina10.json
+data/daily.json       # dados já tratados e embutidos no index.html
+data/daily.csv        # export bruto da aba daily (referência)
+scripts/build.py      # gera o index.html a partir de data/daily.json
 vercel.json           # configuração de deploy estático
 ```
 
@@ -49,6 +48,6 @@ A cada `push` na branch conectada, o Vercel republica automaticamente.
 
 ## Fonte dos dados
 
-Aba **Página10** de *Mini FMH - Analysis* (Google Sheets). Coluna A = indicador,
-coluna D = operação, coluna E = tipo (Mini FMH), cabeçalho F3:EC3 = datas.
-Período disponível: junho e julho de 2025.
+Aba **daily** de *Mini FMH* (Google Sheets). Metric = indicador, Hub name = operação,
+Regional por hub, datas diárias no cabeçalho. Período: 01/jun–02/out 2025 (colunas
+semanais/mensais de forecast são ignoradas). Os 12 hubs Mini FMH são marcados por lista conhecida.

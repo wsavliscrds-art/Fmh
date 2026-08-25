@@ -1,7 +1,7 @@
 import json
 import os
 _root=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-data=open(os.path.join(_root,'data','pagina10.json')).read()
+data=open(os.path.join(_root,'data','daily.json')).read()
 html = r'''<title>Painel Mini FMH</title>
 <style>
 :root{
@@ -127,7 +127,7 @@ button.tog{padding:8px 12px}
     <h1>Painel Mini FMH — Comparativo</h1>
     <span class="sub">Escolha indicadores e operações · <span id="period"></span></span>
   </header>
-  <div class="src">Fonte: aba <b>Página10</b>. <b>Indicadores</b> = coluna A · <b>Operações</b> = coluna D · datas F3:EC3.</div>
+  <div class="src">Fonte: aba <b>daily</b> (Mini FMH). <b>Indicadores</b> = Metric · <b>Operações</b> = Hub name · datas diárias.</div>
 
   <div class="controls">
     <div class="field">
