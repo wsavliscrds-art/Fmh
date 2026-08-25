@@ -588,6 +588,8 @@ function syncAll(){ syncBtns(); drawKpis(); drawLine();
   const oo=document.getElementById('opOpts'); if(oo)renderOpOpts(document.getElementById('opSr').value||''); }
 document.getElementById('tblbtn').onclick=e=>{const c=document.getElementById('tblCard');const open=c.hidden;c.hidden=!open;e.target.setAttribute('aria-expanded',String(open));e.target.textContent=open?'▤ Ocultar tabela':'▤ Tabela diária';};
 window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(drawLine,150);});
+// abrir já comparativo: as 6 operações de maior volume do indicador padrão
+selOp=(function(){ const t=currentOpsWithData().slice(0,6); return t.length?t:['__all']; })();
 buildIndPop();buildOpPop();buildTipoSeg();buildMonthSeg();buildViewSeg();buildIndAB();syncAll();
 </script>
 </body>
