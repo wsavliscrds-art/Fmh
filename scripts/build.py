@@ -95,6 +95,9 @@ thead th{color:var(--muted);font-weight:600}
 .tab{font:inherit;font-size:14px;font-weight:600;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--border);
   border-radius:10px;padding:9px 16px;cursor:pointer}
 .tab[aria-selected=true]{background:var(--accent);color:#fff;border-color:transparent}
+.splitcols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.splitcols .card{margin-bottom:0}
+@media(max-width:820px){.splitcols{grid-template-columns:1fr}}
 .route{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--surface-2)}
 .route .rh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-bottom:6px}
 .route .rh b{color:var(--ink)}
@@ -145,6 +148,7 @@ button.tog{padding:8px 12px}
 
   <div class="tabbar" id="tabbar">
     <button data-t="op" class="tab" aria-selected="true">📦 Operacional (daily)</button>
+    <button data-t="pr" class="tab" aria-selected="false">📊 Apresentação · FM Hub × Mini FMH</button>
     <button data-t="lt" class="tab" aria-selected="false">⏱️ Leadtime (Origem → Delivered)</button>
   </div>
 
@@ -203,6 +207,37 @@ button.tog{padding:8px 12px}
     <div class="cap">Valores por dia de cada série selecionada. Role para o lado para ver todas as datas.</div>
     <div class="tblwrap" id="tblWrap"></div>
   </div>
+  </section>
+
+  <section id="prTab" hidden>
+    <div class="src" style="margin:2px 0 14px">Comparação fixa: <b>FM Hub</b> (hubs regulares) vs <b>Mini FMH</b> (12 hubs) nos indicadores <b>Inbound ADO</b> × <b>Actual Packed ADO</b>.</div>
+    <div class="controls">
+      <div class="field"><label>Mês</label><div class="seg" id="prMonthSeg"></div></div>
+      <div class="field"><label>Suavização</label>
+        <select id="prSmooth"><option value="0">Diário</option><option value="1" selected>Média 7 dias</option></select>
+      </div>
+    </div>
+    <div class="kpis" id="prKpis"></div>
+    <div class="card">
+      <h2>Taxa de Packing — Packed ÷ Inbound</h2>
+      <div class="cap" id="prRateCap">Quanto do que entrou foi efetivamente empacotado. Mesma escala (%) para comparar os dois grupos de forma justa.</div>
+      <div class="chart" id="prRateWrap"></div>
+      <div class="legend" id="prRateLeg"></div>
+    </div>
+    <div class="splitcols">
+      <div class="card">
+        <h2>FM Hub — Inbound × Packed</h2>
+        <div class="cap">Volume diário de ADO que entrou vs foi empacotado (hubs regulares).</div>
+        <div class="chart" id="prFMWrap"></div>
+        <div class="legend" id="prFMLeg"></div>
+      </div>
+      <div class="card">
+        <h2>Mini FMH — Inbound × Packed</h2>
+        <div class="cap">Mesmo comparativo para os 12 hubs Mini FMH.</div>
+        <div class="chart" id="prMiniWrap"></div>
+        <div class="legend" id="prMiniLeg"></div>
+      </div>
+    </div>
   </section>
 
   <section id="ltTab" hidden>
@@ -644,6 +679,65 @@ window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTim
 selOp=(function(){ const t=currentOpsWithData().slice(0,6); return t.length?t:['__all']; })();
 buildIndPop();buildOpPop();buildTipoSeg();buildMonthSeg();buildViewSeg();buildIndAB();syncAll();
 
+/* ===================== ABA APRESENTAÇÃO (FM Hub × Mini FMH) ===================== */
+let prMonths=new Set(MONTHS), prSmooth=true;
+function prViewIdx(){ const idx=[]; DATA.iso.forEach((d,i)=>{ if(prMonths.has(d.slice(0,7)))idx.push(i); }); return idx; }
+function indByName(nm){ return DATA.indicators.find(x=>x.m===nm); }
+function groupDaily(nm,mini){ const it=indByName(nm); const N=DATA.iso.length; const agg=new Array(N).fill(null);
+  if(it) it.hubs.forEach(h=>{ if(MINI.has(h.hub)!==mini)return; h.s.forEach((v,i)=>{ if(v!=null)agg[i]=(agg[i]||0)+v; }); });
+  return agg; }
+function prLine(wrap,legEl,labels,series,unit){
+  const N=labels.length; const W=Math.max(320,cw(wrap)),H=Math.max(220,Math.min(320,Math.round(cw(wrap)*0.42))),m={t:12,r:14,b:28,l:52};
+  const plot=series.map(se=>({...se,p: prSmooth?movavg(se.s,7):se.s}));
+  let mx=0; plot.forEach(se=>se.p.forEach(v=>{if(v!=null&&v>mx)mx=v;}));
+  const top=niceMax(mx); const x=i=>N<=1?m.l:m.l+i*((W-m.l-m.r)/(N-1)); const y=v=>m.t+(top-v)/(top||1)*(H-m.t-m.b);
+  const grid=cssv('--grid'),muted=cssv('--muted');
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">`;
+  for(let t=0;t<=4;t++){const val=top*t/4,yy=y(val);g+=`<line x1="${m.l}" y1="${yy}" x2="${W-m.r}" y2="${yy}" stroke="${grid}"/>`;
+    g+=`<text x="${m.l-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="${muted}">${unit==='pct'?Math.round(val)+'%':fmtK(val)}</text>`;}
+  labels.forEach((lb,i)=>{if(i%Math.ceil(N/8)===0||i===N-1){g+=`<text x="${x(i).toFixed(1)}" y="${H-m.b+16}" text-anchor="middle" font-size="10" fill="${muted}">${lb}</text>`;}});
+  plot.forEach(se=>{let d='',st=false;se.p.forEach((v,i)=>{if(v==null){st=false;return;}d+=(st?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' ';st=true;});
+    g+=`<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;});
+  g+='</svg>'; wrap.innerHTML=g;
+  if(legEl)legEl.innerHTML=series.map(se=>`<span><i style="background:${se.color}"></i>${se.name}</span>`).join('');
+}
+function prFmtPct(v){ return v==null?'—':(Math.round(v*10)/10).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+function drawPr(){
+  const idx=prViewIdx(); const labels=idx.map(i=>DATA.labels[i]);
+  const cA=cssv('--s1'),cB=cssv('--s2'),cIn=cssv('--s1'),cPk=cssv('--s2');
+  const inbFM=groupDaily('Inbound ADO',false), pkFM=groupDaily('Actual Packed ADO',false);
+  const inbMN=groupDaily('Inbound ADO',true),  pkMN=groupDaily('Actual Packed ADO',true);
+  const sl=a=>idx.map(i=>a[i]);
+  const sumf=a=>{let s=0,any=false;a.forEach(v=>{if(v!=null){s+=v;any=true;}});return any?s:null;};
+  // KPIs
+  const tInbFM=sumf(sl(inbFM)),tPkFM=sumf(sl(pkFM)),tInbMN=sumf(sl(inbMN)),tPkMN=sumf(sl(pkMN));
+  const rFM=tInbFM?100*tPkFM/tInbFM:null, rMN=tInbMN?100*tPkMN/tInbMN:null;
+  const kp=(t,sub,cls)=>`<div class="kpi"><div class="k">${t}</div><div class="v">${sub}</div><div class="m">${cls}</div></div>`;
+  document.getElementById('prKpis').innerHTML=
+    `<div class="kpi" style="border-left:3px solid ${cA}"><div class="k">FM Hub · Inbound</div><div class="v">${fmtK(tInbFM)}</div><div class="m">Packed ${fmtK(tPkFM)}</div></div>`+
+    `<div class="kpi" style="border-left:3px solid ${cA}"><div class="k">FM Hub · Packing</div><div class="v">${prFmtPct(rFM)}</div><div class="m">Packed ÷ Inbound</div></div>`+
+    `<div class="kpi" style="border-left:3px solid ${cB}"><div class="k">Mini FMH · Inbound</div><div class="v">${fmtK(tInbMN)}</div><div class="m">Packed ${fmtK(tPkMN)}</div></div>`+
+    `<div class="kpi" style="border-left:3px solid ${cB}"><div class="k">Mini FMH · Packing</div><div class="v">${prFmtPct(rMN)}</div><div class="m">${rFM!=null&&rMN!=null?(rMN>=rFM?'▲':'▼')+' vs FM '+prFmtPct(Math.abs(rMN-rFM)):''}</div></div>`;
+  // rate over time (per day ratio)
+  const rate=(inb,pk)=>idx.map(i=>(inb[i]&&inb[i]>0&&pk[i]!=null)?100*pk[i]/inb[i]:null);
+  prLine(document.getElementById('prRateWrap'),document.getElementById('prRateLeg'),labels,
+    [{name:'FM Hub',color:cA,s:rate(inbFM,pkFM)},{name:'Mini FMH',color:cB,s:rate(inbMN,pkMN)}],'pct');
+  document.getElementById('prRateCap').textContent=`Quanto do que entrou foi empacotado · FM Hub ${prFmtPct(rFM)} vs Mini FMH ${prFmtPct(rMN)} no período · mesma escala (%).`;
+  // per-group inbound vs packed
+  prLine(document.getElementById('prFMWrap'),document.getElementById('prFMLeg'),labels,
+    [{name:'Inbound ADO',color:cIn,s:sl(inbFM)},{name:'Actual Packed ADO',color:cPk,s:sl(pkFM)}],'num');
+  prLine(document.getElementById('prMiniWrap'),document.getElementById('prMiniLeg'),labels,
+    [{name:'Inbound ADO',color:cIn,s:sl(inbMN)},{name:'Actual Packed ADO',color:cPk,s:sl(pkMN)}],'num');
+}
+function buildPrMonthSeg(){ const el=document.getElementById('prMonthSeg');
+  el.innerHTML=[`<button data-m="__all">Tudo</button>`].concat(MONTHS.map(m=>`<button data-m="${m}">${MNAME[m.slice(5,7)]}</button>`)).join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ const m=b.dataset.m; prMonths=(m==='__all')?new Set(MONTHS):new Set([m]); syncPrMonthSeg(); drawPr(); });
+  syncPrMonthSeg();
+}
+function syncPrMonthSeg(){ const all=prMonths.size===MONTHS.length;
+  document.querySelectorAll('#prMonthSeg button').forEach(b=>{const m=b.dataset.m;b.setAttribute('aria-pressed',String(m==='__all'?all:(!all&&prMonths.has(m))));}); }
+document.getElementById('prSmooth').onchange=e=>{ prSmooth=e.target.value==='1'; drawPr(); };
+
 /* ===================== ABA LEADTIME ===================== */
 const LEAD = __LEAD__;
 const LTMETA={lt_d:{lab:'Lead time (dias)',lower:true},lt_h:{lab:'Lead time (horas)',lower:true},ops:{lab:'Operações/pacote',lower:true},delivered:{lab:'Pacotes entregues',lower:false}};
@@ -768,13 +862,13 @@ let curTab='op';
 function switchTab(t){ curTab=t;
   document.querySelectorAll('#tabbar .tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.t===t)));
   document.getElementById('opTab').hidden = t!=='op';
+  document.getElementById('prTab').hidden = t!=='pr';
   document.getElementById('ltTab').hidden = t!=='lt';
-  if(t==='op') drawLine(); else drawLt();
+  if(t==='op') drawLine(); else if(t==='pr') drawPr(); else drawLt();
 }
 document.querySelectorAll('#tabbar .tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.t));
-buildLtMonthSeg();buildLtStation();
-const _oldRz=window.onresize;
-window.addEventListener('resize',()=>{clearTimeout(window._rz2);window._rz2=setTimeout(()=>{ if(curTab==='lt') drawLt(); },150);});
+buildPrMonthSeg();buildLtMonthSeg();buildLtStation();
+window.addEventListener('resize',()=>{clearTimeout(window._rz2);window._rz2=setTimeout(()=>{ if(curTab==='pr') drawPr(); else if(curTab==='lt') drawLt(); },150);});
 </script>'''
 html=html.replace('__DATA__',data).replace('__LEAD__',lead)
 skeleton=('<!doctype html>\n<html lang="pt-BR">\n<head>\n'
