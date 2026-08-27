@@ -91,6 +91,7 @@ thead th{color:var(--muted);font-weight:600}
 .cmp td:first-child{display:flex;align-items:center;gap:7px}
 .cmp .sw{width:11px;height:11px;border-radius:3px;flex:none}
 .tblwrap{max-height:440px;overflow:auto;border:1px solid var(--border);border-radius:10px}
+.themebtn{margin-left:auto;font-size:13px}
 .tabbar{display:flex;gap:6px;margin:6px 0 18px;flex-wrap:wrap}
 .tab{font:inherit;font-size:14px;font-weight:600;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--border);
   border-radius:10px;padding:9px 16px;cursor:pointer}
@@ -143,6 +144,7 @@ button.tog{padding:8px 12px}
   <header class="top">
     <h1>Painel Mini FMH — Comparativo</h1>
     <span class="sub">Escolha indicadores e operações · <span id="period"></span></span>
+    <button class="tog themebtn" id="themeBtn" title="Alternar tema">☀️ Claro</button>
   </header>
   <div class="src">Fonte: planilha <b>Mini FMH</b>. Alterne entre as abas abaixo.</div>
 
@@ -869,6 +871,21 @@ function switchTab(t){ curTab=t;
 document.querySelectorAll('#tabbar .tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.t));
 buildPrMonthSeg();buildLtMonthSeg();buildLtStation();
 window.addEventListener('resize',()=>{clearTimeout(window._rz2);window._rz2=setTimeout(()=>{ if(curTab==='pr') drawPr(); else if(curTab==='lt') drawLt(); },150);});
+
+/* ===================== TEMA (claro/escuro) ===================== */
+(function(){
+  const btn=document.getElementById('themeBtn');
+  function redraw(){ if(curTab==='op')drawLine(); else if(curTab==='pr')drawPr(); else drawLt(); }
+  function apply(t){ document.documentElement.setAttribute('data-theme',t);
+    btn.textContent = t==='dark'?'🌙 Escuro':'☀️ Claro';
+    try{localStorage.setItem('fmh-theme',t);}catch(e){}
+    redraw();
+  }
+  let init='light';
+  try{ const s=localStorage.getItem('fmh-theme'); if(s==='dark'||s==='light')init=s; }catch(e){}
+  apply(init);
+  btn.onclick=()=>apply(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+})();
 </script>'''
 html=html.replace('__DATA__',data).replace('__LEAD__',lead)
 skeleton=('<!doctype html>\n<html lang="pt-BR">\n<head>\n'
